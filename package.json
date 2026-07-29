@@ -1,0 +1,122 @@
+{
+  "name": "texteditormd",
+  "version": "1.0.0",
+  "description": "TextEditorMD — desktop Markdown editor with CommonMark live preview.",
+  "main": "./out/main/index.js",
+  "author": {
+    "name": "Graham Inman",
+    "email": "support@grokcode.example"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/grahaminman/TextEditorMD",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grahaminman/TextEditorMD.git"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:all": "npm run build && electron-builder -mwl",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.6",
+    "@codemirror/commands": "^6.8.0",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/language": "^6.11.0",
+    "@codemirror/language-data": "^6.5.1",
+    "@codemirror/search": "^6.5.10",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.5",
+    "@lezer/highlight": "^1.2.1",
+    "@lezer/markdown": "^1.4.1",
+    "commonmark": "^0.31.2",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@types/commonmark": "^0.27.9",
+    "@types/node": "^22.13.10",
+    "electron": "^34.3.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2",
+    "vitest": "^3.0.9"
+  },
+  "build": {
+    "appId": "com.texteditormd.app",
+    "productName": "TextEditorMD",
+    "copyright": "Copyright © 2026 TextEditorMD",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["**/*"]
+      }
+    ],
+    "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "grahaminman",
+        "repo": "TextEditorMD"
+      }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TextEditorMD"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Office",
+      "maintainer": "TextEditorMD <support@grokcode.example>",
+      "artifactName": "${productName}-${version}.${ext}",
+      "desktop": {
+        "Name": "TextEditorMD",
+        "Comment": "TextEditorMD — Markdown editor with CommonMark preview",
+        "Categories": "Office;TextEditor;"
+      }
+    },
+    "appImage": {
+      "license": "LICENSE"
+    }
+  }
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TextEditorMD</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="toolbar" class="toolbar">
+        <div class="toolbar-left">
+          <span class="app-brand">TextEditorMD</span>
+          <span id="doc-title" class="doc-title">Untitled</span>
+        </div>
+        <div class="toolbar-right">
+          <button type="button" id="btn-find" class="tb-btn">Find</button>
+          <button type="button" id="btn-replace" class="tb-btn">Replace</button>
+          <button type="button" id="btn-font-dec" class="tb-btn" title="Smaller">A−</button>
+          <span id="font-size-label" class="font-size-label">15</span>
+          <button type="button" id="btn-font-inc" class="tb-btn" title="Larger">A+</button>
+          <button type="button" id="btn-syntax-colors" class="tb-btn">Colours</button>
+          <button type="button" id="btn-theme" class="tb-btn">Theme</button>
+          <button type="button" id="btn-toggle-preview" class="tb-btn">Preview</button>
+        </div>
+      </header>
+
+      <main id="workspace" class="workspace">
+        <section id="editor-pane" class="pane editor-pane">
+          <div id="editor" class="editor-host"></div>
+        </section>
+        <div id="pane-resizer" class="pane-resizer" role="separator" aria-orientation="vertical"></div>
+        <section id="preview-pane" class="pane preview-pane">
+          <div id="preview" class="preview-host"></div>
+        </section>
+      </main>
+
+      <footer id="statusbar" class="statusbar">
+        <span id="status-state" class="status-item">Ready</span>
+        <span id="status-path" class="status-item path"></span>
+        <span class="status-spacer"></span>
+        <button type="button" id="status-find" class="status-btn">Find</button>
+        <button type="button" id="status-replace" class="status-btn">Replace</button>
+        <span id="status-font-label" class="status-item">Font</span>
+        <button type="button" id="status-font-dec" class="status-btn">−</button>
+        <span id="status-font-value" class="status-item">15</span>
+        <button type="button" id="status-font-inc" class="status-btn">+</button>
+        <span id="status-words" class="status-item">0 words</span>
+        <span id="status-chars" class="status-item">0 chars</span>
+        <span id="status-read" class="status-item">~1 min</span>
+      </footer>
+
+      <div id="welcome-overlay" class="welcome-overlay hidden">
+        <div class="welcome-card">
+          <h1 id="welcome-title">TextEditorMD</h1>
+          <p id="welcome-body">
+            Write Markdown with a live CommonMark preview. Open a file or start from the starter
+            template.
+          </p>
+          <div class="welcome-actions">
+            <button type="button" id="welcome-new" class="primary">New document</button>
+            <button type="button" id="welcome-open">Open…</button>
+            <button type="button" id="welcome-dismiss">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
