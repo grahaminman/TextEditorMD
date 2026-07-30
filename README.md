@@ -1,5 +1,8 @@
 # TextEditorMD
 
+> **⚠️ BETA SOFTWARE** — early preview for testing. Not a finished product.  
+> Features may change or break.
+
 Desktop **Markdown** editor with a live **[CommonMark](https://commonmark.org/)** preview.
 
 Built with **Electron**, **TypeScript**, **CodeMirror 6**, and the reference **commonmark.js** renderer.
