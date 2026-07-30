@@ -62,6 +62,13 @@ function createWindow(): void {
     e.preventDefault()
     void (async () => {
       if (!mainWindow) return
+      const prefs = getPreferences()
+      // Autosave on close when enabled and the file already has a path
+      if (prefs.autosaveOnClose && state.filePath) {
+        mainWindow.webContents.send(IPC.MENU_ACTION, 'file:autosave-then-quit')
+        return
+      }
+      // Untitled (or autosave-on-close off): prompt Save / Discard / Cancel
       const choice = await confirmDiscard(mainWindow)
       if (choice === 'cancel') return
       if (choice === 'save') {

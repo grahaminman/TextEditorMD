@@ -143,6 +143,11 @@ export function buildApplicationMenu(win: BrowserWindow): void {
           label: 'Syntax Colours…',
           click: () => send(win, 'view:syntax-colors')
         },
+        {
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => send(win, 'view:settings')
+        },
         { type: 'separator' },
         {
           label: 'Increase Font Size',

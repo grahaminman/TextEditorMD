@@ -21,7 +21,8 @@ Built with **Electron**, **TypeScript**, **CodeMirror 6**, and the reference **c
 | **CommonMark preview** | Live HTML preview via [commonmark.js](https://github.com/commonmark/commonmark.js) (CommonMark spec) |
 | **Themes** | Light, Dark, and System |
 | **Syntax highlighting** | Toggleable; presets (default / high contrast / soft) + custom colours |
-| **Settings** | Font size, typewriter mode, preview follow cursor, syntax colours |
+| **Settings** | Font size, typewriter mode, preview follow, syntax colours, **autosave** |
+| **Autosave** | On by default every **5 minutes** (1 min–1 hr); optional **autosave on close** when a file path exists |
 | **Find / replace** | Built-in CodeMirror search panel |
 | **Files** | Open/save `.md` / `.markdown` / `.txt`; export standalone **HTML** |
 | **Starter template** | Helpful CommonMark sample on first run / New |
@@ -76,6 +77,7 @@ TextEditorMD/
 | `Ctrl/Cmd+F` | Find |
 | `Ctrl/Cmd+P` | Toggle preview |
 | `Ctrl/Cmd+=` / `-` | Font size |
+| `Ctrl/Cmd+,` | Settings (autosave, etc.) |
 
 ## License
 

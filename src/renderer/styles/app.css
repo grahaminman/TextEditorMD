@@ -368,6 +368,43 @@ html[data-theme='dark'] .md-preview {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
 }
 
+.settings-panel-wide {
+  width: min(480px, 94vw);
+}
+
+.settings-section-title {
+  margin: 0.25rem 0 0.15rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+
+.settings-row-check {
+  align-items: flex-start;
+}
+
+.settings-row-check input[type='checkbox'] {
+  margin-top: 0.25rem;
+  min-width: auto;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.settings-sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  font-weight: normal;
+  margin-top: 0.15rem;
+  max-width: 20rem;
+  line-height: 1.35;
+}
+
+.status-item.autosaved {
+  color: var(--accent);
+}
+
 .settings-header {
   display: flex;
   align-items: center;

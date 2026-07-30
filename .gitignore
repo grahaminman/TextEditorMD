@@ -9,3 +9,6 @@ dist/
 *.local
 .env
 .env.*
+
+release-notes/
+release/

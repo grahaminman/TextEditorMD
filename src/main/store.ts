@@ -4,10 +4,14 @@
 
 import Store from 'electron-store'
 import {
+  DEFAULT_AUTOSAVE_ENABLED,
+  DEFAULT_AUTOSAVE_INTERVAL_MINUTES,
+  DEFAULT_AUTOSAVE_ON_CLOSE,
   DEFAULT_THEME,
   FONT_SIZE_DEFAULT,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
+  clampAutosaveIntervalMinutes,
   type AppPreferences
 } from '../shared/constants/app'
 import { SYNTAX_PRESET_DEFAULT } from '../shared/constants/syntax-colors'
@@ -25,6 +29,9 @@ const defaults: AppPreferences = {
   syntaxColorPreset: 'default',
   syntaxColorsCustom: { ...SYNTAX_PRESET_DEFAULT },
   editorFontSize: FONT_SIZE_DEFAULT,
+  autosaveEnabled: DEFAULT_AUTOSAVE_ENABLED,
+  autosaveIntervalMinutes: DEFAULT_AUTOSAVE_INTERVAL_MINUTES,
+  autosaveOnClose: DEFAULT_AUTOSAVE_ON_CLOSE,
   windowBounds: { width: 1400, height: 900 }
 }
 
@@ -61,6 +68,15 @@ export function getPreferences(): AppPreferences {
     editorFontSize: clampFontSize(
       prefsStore.get('editorFontSize', defaults.editorFontSize)
     ),
+    autosaveEnabled: Boolean(
+      prefsStore.get('autosaveEnabled', defaults.autosaveEnabled)
+    ),
+    autosaveIntervalMinutes: clampAutosaveIntervalMinutes(
+      prefsStore.get('autosaveIntervalMinutes', defaults.autosaveIntervalMinutes)
+    ),
+    autosaveOnClose: Boolean(
+      prefsStore.get('autosaveOnClose', defaults.autosaveOnClose)
+    ),
     windowBounds: prefsStore.get('windowBounds', defaults.windowBounds)
   }
 }
@@ -71,6 +87,11 @@ export function setPreference<K extends keyof AppPreferences>(
 ): AppPreferences {
   if (key === 'editorFontSize') {
     prefsStore.set(key, clampFontSize(value as number) as AppPreferences[K])
+  } else if (key === 'autosaveIntervalMinutes') {
+    prefsStore.set(
+      key,
+      clampAutosaveIntervalMinutes(value as number) as AppPreferences[K]
+    )
   } else {
     prefsStore.set(key, value)
   }
@@ -82,6 +103,11 @@ export function setPreferences(partial: Partial<AppPreferences>): AppPreferences
     if (v === undefined) continue
     if (k === 'editorFontSize') {
       prefsStore.set('editorFontSize', clampFontSize(v as number))
+    } else if (k === 'autosaveIntervalMinutes') {
+      prefsStore.set(
+        'autosaveIntervalMinutes',
+        clampAutosaveIntervalMinutes(v as number)
+      )
     } else {
       prefsStore.set(k as keyof AppPreferences, v as never)
     }

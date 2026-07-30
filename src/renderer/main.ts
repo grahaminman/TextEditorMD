@@ -7,10 +7,19 @@ import { createEditor, type EditorHandle } from './editor/create-editor'
 import { createPreview, type PreviewHandle } from './preview/preview'
 import { createSyntaxSettingsPanel, type SyntaxSettingsHandle } from './ui/syntax-settings'
 import {
+  createAppSettingsPanel,
+  type AppSettingsHandle
+} from './ui/app-settings'
+import {
+  DEFAULT_AUTOSAVE_ENABLED,
+  DEFAULT_AUTOSAVE_INTERVAL_MINUTES,
+  DEFAULT_AUTOSAVE_ON_CLOSE,
   FONT_SIZE_DEFAULT,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   FONT_SIZE_STEP,
+  clampAutosaveIntervalMinutes,
+  type AutosaveIntervalMinutes,
   type ThemeMode
 } from '../shared/constants/app'
 import {
@@ -30,6 +39,7 @@ import { undo, redo } from '@codemirror/commands'
 let editor: EditorHandle
 let preview: PreviewHandle
 let syntaxSettings: SyntaxSettingsHandle
+let appSettings: AppSettingsHandle
 
 let theme: ThemeMode = 'system'
 let filePath: string | null = null
@@ -41,11 +51,18 @@ let syntaxHighlighting = true
 let syntaxColorPreset: SyntaxColorPresetId = 'default'
 let syntaxColorsCustom: SyntaxColorPalette = { ...SYNTAX_PRESET_DEFAULT }
 let editorFontSize = FONT_SIZE_DEFAULT
+let autosaveEnabled = DEFAULT_AUTOSAVE_ENABLED
+let autosaveIntervalMinutes: AutosaveIntervalMinutes =
+  DEFAULT_AUTOSAVE_INTERVAL_MINUTES
+let autosaveOnClose = DEFAULT_AUTOSAVE_ON_CLOSE
 let suppressDirty = false
 let welcomeDismissed = false
+let saving = false
 
 let statsTimer: ReturnType<typeof setTimeout> | null = null
 let followTimer: ReturnType<typeof setTimeout> | null = null
+let autosaveTimer: ReturnType<typeof setInterval> | null = null
+let statusFlashTimer: ReturnType<typeof setTimeout> | null = null
 let cursorLine = 1
 
 const el = {
@@ -64,6 +81,7 @@ const el = {
   fontSizeLabel: document.getElementById('font-size-label') as HTMLElement,
   btnPreview: document.getElementById('btn-toggle-preview') as HTMLButtonElement,
   btnSyntaxColors: document.getElementById('btn-syntax-colors') as HTMLButtonElement,
+  btnSettings: document.getElementById('btn-settings') as HTMLButtonElement,
   btnTheme: document.getElementById('btn-theme') as HTMLButtonElement,
   btnFind: document.getElementById('btn-find') as HTMLButtonElement,
   btnReplace: document.getElementById('btn-replace') as HTMLButtonElement,
@@ -144,9 +162,9 @@ function scheduleFollow(): void {
   }, 80)
 }
 
-function setDirty(next: boolean): void {
+async function setDirty(next: boolean): Promise<void> {
   dirty = next
-  void window.api.setDirty(next)
+  await window.api.setDirty(next)
   updateTitle()
 }
 
@@ -154,7 +172,7 @@ function loadDocument(content: string, path: string | null, fromTemplate: boolea
   suppressDirty = true
   editor.setValue(content)
   filePath = path
-  setDirty(false)
+  void setDirty(false)
   suppressDirty = false
   scheduleStats()
   if (fromTemplate && !welcomeDismissed) {
@@ -172,16 +190,81 @@ async function handleSaveResult(
     return false
   }
   if (result.path) filePath = result.path
-  setDirty(false)
+  await setDirty(false)
   return true
 }
 
 async function doSave(forceAs = false): Promise<boolean> {
-  const content = editor.getValue()
-  const result = forceAs
-    ? await window.api.saveFileAs(content)
-    : await window.api.saveFile(content, false)
-  return handleSaveResult(result)
+  if (saving) return false
+  saving = true
+  try {
+    const content = editor.getValue()
+    const result = forceAs
+      ? await window.api.saveFileAs(content)
+      : await window.api.saveFile(content, false)
+    return await handleSaveResult(result)
+  } finally {
+    saving = false
+  }
+}
+
+/**
+ * Timed autosave / close autosave: only when dirty and a path exists.
+ * Does not open Save As for untitled buffers.
+ */
+async function tryAutosave(reason: 'interval' | 'close'): Promise<boolean> {
+  if (!dirty || !filePath || saving) return !dirty
+  const ok = await doSave(false)
+  if (ok && reason === 'interval') {
+    flashStatus('Autosaved')
+  }
+  return ok
+}
+
+function flashStatus(message: string): void {
+  el.statusState.textContent = message
+  el.statusState.classList.add('autosaved')
+  if (statusFlashTimer) clearTimeout(statusFlashTimer)
+  statusFlashTimer = setTimeout(() => {
+    el.statusState.classList.remove('autosaved')
+    updateTitle()
+  }, 2500)
+}
+
+function restartAutosaveTimer(): void {
+  if (autosaveTimer) {
+    clearInterval(autosaveTimer)
+    autosaveTimer = null
+  }
+  if (!autosaveEnabled) return
+  const ms = autosaveIntervalMinutes * 60 * 1000
+  autosaveTimer = setInterval(() => {
+    void tryAutosave('interval')
+  }, ms)
+}
+
+function applyAutosavePrefs(partial: {
+  autosaveEnabled?: boolean
+  autosaveIntervalMinutes?: number
+  autosaveOnClose?: boolean
+}): void {
+  if (partial.autosaveEnabled !== undefined) {
+    autosaveEnabled = Boolean(partial.autosaveEnabled)
+  }
+  if (partial.autosaveIntervalMinutes !== undefined) {
+    autosaveIntervalMinutes = clampAutosaveIntervalMinutes(
+      partial.autosaveIntervalMinutes
+    )
+  }
+  if (partial.autosaveOnClose !== undefined) {
+    autosaveOnClose = Boolean(partial.autosaveOnClose)
+  }
+  appSettings?.sync({
+    autosaveEnabled,
+    autosaveIntervalMinutes,
+    autosaveOnClose
+  })
+  restartAutosaveTimer()
 }
 
 async function doNew(): Promise<void> {
@@ -264,6 +347,7 @@ function wireUi(): void {
   el.btnPreview.addEventListener('click', () => setPreviewVisible(!previewVisible))
   el.btnTheme.addEventListener('click', () => cycleTheme())
   el.btnSyntaxColors.addEventListener('click', () => syntaxSettings.open())
+  el.btnSettings?.addEventListener('click', () => appSettings.open())
   el.welcomeNew.addEventListener('click', () => {
     welcomeDismissed = true
     el.welcome.classList.add('hidden')
@@ -307,6 +391,18 @@ function wireMenus(): void {
           if (ok) window.close()
           break
         }
+        case 'file:autosave-then-quit': {
+          // Close with known path: silent save. If it fails, fall back to prompt flow.
+          const ok = await tryAutosave('close')
+          if (ok) {
+            window.close()
+          } else {
+            // Still dirty/untitled or error — let user choose Save As
+            const saved = await doSave(false)
+            if (saved) window.close()
+          }
+          break
+        }
         case 'file:export-html': {
           const r = await window.api.exportHtml(editor.getValue())
           if (r.error) await window.api.showError(r.error)
@@ -344,6 +440,9 @@ function wireMenus(): void {
         case 'view:syntax-colors':
           syntaxSettings.open()
           break
+        case 'view:settings':
+          appSettings.open()
+          break
         case 'view:font-inc':
           applyFontSize(editorFontSize + FONT_SIZE_STEP)
           break
@@ -378,6 +477,11 @@ async function bootstrap(): Promise<void> {
   syntaxColorPreset = prefs.syntaxColorPreset
   syntaxColorsCustom = { ...SYNTAX_PRESET_DEFAULT, ...prefs.syntaxColorsCustom }
   editorFontSize = prefs.editorFontSize
+  autosaveEnabled = prefs.autosaveEnabled ?? DEFAULT_AUTOSAVE_ENABLED
+  autosaveIntervalMinutes = clampAutosaveIntervalMinutes(
+    prefs.autosaveIntervalMinutes ?? DEFAULT_AUTOSAVE_INTERVAL_MINUTES
+  )
+  autosaveOnClose = prefs.autosaveOnClose ?? DEFAULT_AUTOSAVE_ON_CLOSE
 
   preview = createPreview(el.previewRoot)
   editor = createEditor({
@@ -387,7 +491,7 @@ async function bootstrap(): Promise<void> {
     typewriterMode,
     syntaxHighlighting,
     onChange: () => {
-      if (!suppressDirty) setDirty(true)
+      if (!suppressDirty) void setDirty(true)
       scheduleStats()
     },
     onCursor: (line) => {
@@ -410,10 +514,27 @@ async function bootstrap(): Promise<void> {
     }
   })
 
+  appSettings = createAppSettingsPanel(document.body, {
+    getState: () => ({
+      autosaveEnabled,
+      autosaveIntervalMinutes,
+      autosaveOnClose
+    }),
+    onChange: (state) => {
+      applyAutosavePrefs(state)
+      void window.api.setPreferences({
+        autosaveEnabled: state.autosaveEnabled,
+        autosaveIntervalMinutes: state.autosaveIntervalMinutes,
+        autosaveOnClose: state.autosaveOnClose
+      })
+    }
+  })
+
   applyTheme(theme)
   applyFontSize(editorFontSize, false)
   applySyntax()
   setPreviewVisible(previewVisible, false)
+  restartAutosaveTimer()
   initResizer()
   wireUi()
   wireMenus()
@@ -431,6 +552,11 @@ async function bootstrap(): Promise<void> {
     syntaxColorPreset = p.syntaxColorPreset
     syntaxColorsCustom = { ...SYNTAX_PRESET_DEFAULT, ...p.syntaxColorsCustom }
     applySyntax()
+    applyAutosavePrefs({
+      autosaveEnabled: p.autosaveEnabled,
+      autosaveIntervalMinutes: p.autosaveIntervalMinutes,
+      autosaveOnClose: p.autosaveOnClose
+    })
   })
 
   const startup = await window.api.getStartupDocument()
