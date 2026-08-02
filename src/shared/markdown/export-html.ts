@@ -53,9 +53,17 @@ export function markdownToStandaloneHtml(
       color: #546e7a;
     }
     img { max-width: 100%; height: auto; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; display: block; overflow-x: auto; }
+    thead { background: #eef6fb; }
+    th, td { border: 1px solid #ccc; padding: 0.45rem 0.7rem; text-align: left; vertical-align: top; }
+    th { font-weight: 700; }
+    tbody tr:nth-child(even) { background: #fafafa; }
     hr { border: none; border-top: 1px solid #ccc; margin: 1.5rem 0; }
+    @media (prefers-color-scheme: dark) {
+      thead { background: #1e2a33; }
+      th, td { border-color: #444; }
+      tbody tr:nth-child(even) { background: #1a1a1a; }
+    }
   </style>
 </head>
 <body>

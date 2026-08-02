@@ -18,7 +18,7 @@ Built with **Electron**, **TypeScript**, **CodeMirror 6**, and the reference **c
 | Feature | Description |
 |--------|-------------|
 | **Markdown editor** | CodeMirror 6 with Markdown language support and fenced-code languages |
-| **CommonMark preview** | Live HTML preview via [commonmark.js](https://github.com/commonmark/commonmark.js) (CommonMark spec) |
+| **Markdown preview** | Live HTML: CommonMark core + **GFM tables** (pipe tables render as real tables) |
 | **Themes** | Light, Dark, and System |
 | **Syntax highlighting** | Toggleable; presets (default / high contrast / soft) + custom colours |
 | **Settings** | Font size, typewriter mode, preview follow, syntax colours, **autosave** |
@@ -28,9 +28,19 @@ Built with **Electron**, **TypeScript**, **CodeMirror 6**, and the reference **c
 | **Starter template** | Helpful CommonMark sample on first run / New |
 | **Installers** | Windows NSIS, macOS DMG, Linux AppImage + deb (via CI) |
 
-## CommonMark
+## Markdown dialect
 
-Preview and HTML export use the **reference CommonMark implementation** so rendering matches the [CommonMark specification](https://commonmark.org/). This is standard Markdown — not a screenplay format, and not GitHub-Flavored Markdown extensions unless they also appear in CommonMark.
+Preview and HTML export are **CommonMark**-based, with **GitHub-style pipe tables** enabled so blocks like:
+
+```md
+| Feature | Status |
+| ------- | ------ |
+| Tables  | Yes    |
+```
+
+render as formatted tables in the preview (not plain text). Editor highlighting also understands GFM tables.
+
+Spec: [CommonMark](https://commonmark.org/) · tables: [GFM tables](https://github.github.com/gfm/#tables-extension-)
 
 ## Quick start
 

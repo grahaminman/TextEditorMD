@@ -30,6 +30,7 @@ import {
 } from '@codemirror/language'
 import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
+import { GFM } from '@lezer/markdown'
 import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search'
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { tags } from '@lezer/highlight'
@@ -206,7 +207,8 @@ export function createEditor(opts: CreateEditorOptions): EditorHandle {
       autocompletion(),
       highlightSelectionMatches(),
       history(),
-      markdown({ codeLanguages: languages }),
+      // GFM includes pipe tables so table syntax is highlighted in the source
+      markdown({ codeLanguages: languages, extensions: GFM }),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,

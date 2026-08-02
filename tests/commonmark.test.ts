@@ -44,6 +44,21 @@ describe('CommonMark rendering', () => {
     expect(html).toContain('<blockquote>')
     expect(html).toContain('quoted')
   })
+
+  it('renders GFM pipe tables as HTML tables', () => {
+    const src = [
+      '| Name | Score |',
+      '| ---- | ----- |',
+      '| Ada  | 10    |',
+      '| Lin  | 9     |'
+    ].join('\n')
+    const html = renderCommonMarkHtml(src)
+    expect(html).toContain('<table>')
+    expect(html).toContain('<th>')
+    expect(html).toContain('<td>')
+    expect(html).toContain('Ada')
+    expect(html).toContain('10')
+  })
 })
 
 describe('stats helpers', () => {

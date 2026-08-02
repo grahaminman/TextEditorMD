@@ -41,10 +41,12 @@
     "@lezer/markdown": "^1.4.1",
     "commonmark": "^0.31.2",
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "markdown-it": "^14.3.0"
   },
   "devDependencies": {
     "@types/commonmark": "^0.27.9",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.13.10",
     "electron": "^34.3.0",
     "electron-builder": "^25.1.8",
@@ -71,7 +73,9 @@
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asar": true,
@@ -83,7 +87,14 @@
       }
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "nsis": {
@@ -95,7 +106,15 @@
       "shortcutName": "TextEditorMD"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.productivity",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "hardenedRuntime": true,
@@ -103,8 +122,18 @@
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "category": "Office",
       "maintainer": "TextEditorMD <support@grokcode.example>",

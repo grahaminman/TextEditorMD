@@ -360,12 +360,29 @@ html[data-theme='dark'] .md-preview-body blockquote {
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+  font-size: 0.95em;
+}
+
+.md-preview-body thead {
+  background: color-mix(in srgb, var(--accent) 12%, var(--preview-code-bg));
 }
 
 .md-preview-body th,
 .md-preview-body td {
   border: 1px solid var(--border);
-  padding: 0.4rem 0.6rem;
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-preview-body th {
+  font-weight: 700;
+}
+
+.md-preview-body tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--preview-fg) 4%, var(--preview-bg));
 }
 
 .md-preview-body hr {
