@@ -54,21 +54,32 @@ const fontCompartment = new Compartment()
 const typewriterCompartment = new Compartment()
 const syntaxCompartment = new Compartment()
 
+/**
+ * Selection is drawn on a layer *behind* line backgrounds (drawSelection).
+ * Active-line colours must stay translucent or they fully hide the highlight.
+ */
 const lightTheme = EditorView.theme(
   {
     '&': { backgroundColor: '#fafafa', color: '#1a1a1a' },
     '.cm-content': { caretColor: '#1565c0' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#1565c0' },
     '&.cm-focused .cm-cursor': { borderLeftColor: '#1565c0' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: '#bbdefb'
+    /* Layer path used by drawSelection() */
+    '.cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': {
+      backgroundColor: 'rgba(25, 118, 210, 0.35)'
     },
-    '.cm-activeLine': { backgroundColor: '#f0f4f8' },
+    '&.cm-focused .cm-selectionLayer .cm-selectionBackground, &.cm-focused .cm-selectionBackground':
+      {
+        backgroundColor: 'rgba(25, 118, 210, 0.45)'
+      },
+    /* Keep translucent so selection remains visible underneath */
+    '.cm-activeLine': { backgroundColor: 'rgba(21, 101, 192, 0.08)' },
     '.cm-gutters': {
       backgroundColor: '#f0f0f0',
       color: '#78909c',
       border: 'none'
     },
-    '.cm-activeLineGutter': { backgroundColor: '#e3f2fd' }
+    '.cm-activeLineGutter': { backgroundColor: 'rgba(21, 101, 192, 0.12)' }
   },
   { dark: false }
 )
@@ -77,17 +88,22 @@ const darkTheme = EditorView.theme(
   {
     '&': { backgroundColor: '#1e1e1e', color: '#e0e0e0' },
     '.cm-content': { caretColor: '#90caf9' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#90caf9' },
     '&.cm-focused .cm-cursor': { borderLeftColor: '#90caf9' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: '#264f78'
+    '.cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': {
+      backgroundColor: 'rgba(100, 181, 246, 0.4)'
     },
-    '.cm-activeLine': { backgroundColor: '#2a2a2a' },
+    '&.cm-focused .cm-selectionLayer .cm-selectionBackground, &.cm-focused .cm-selectionBackground':
+      {
+        backgroundColor: 'rgba(100, 181, 246, 0.55)'
+      },
+    '.cm-activeLine': { backgroundColor: 'rgba(255, 255, 255, 0.045)' },
     '.cm-gutters': {
       backgroundColor: '#1a1a1a',
       color: '#78909c',
       border: 'none'
     },
-    '.cm-activeLineGutter': { backgroundColor: '#2a2a2a' }
+    '.cm-activeLineGutter': { backgroundColor: 'rgba(255, 255, 255, 0.06)' }
   },
   { dark: true }
 )
@@ -180,7 +196,8 @@ export function createEditor(opts: CreateEditorOptions): EditorHandle {
       highlightActiveLine(),
       highlightActiveLineGutter(),
       foldGutter(),
-      drawSelection(),
+      // Custom selection layer (native ::selection is suppressed by CM)
+      drawSelection({ cursorBlinkRate: 1200 }),
       rectangularSelection(),
       crosshairCursor(),
       indentOnInput(),
@@ -203,7 +220,9 @@ export function createEditor(opts: CreateEditorOptions): EditorHandle {
       typewriterCompartment.of(typewriterExt(Boolean(opts.typewriterMode))),
       syntaxCompartment.of(syntaxExt(opts.syntaxHighlighting !== false)),
       updateListener,
-      EditorView.lineWrapping
+      EditorView.lineWrapping,
+      // Prefer CM selection drawing over OS-native selection painting
+      EditorView.contentAttributes.of({ spellcheck: 'false' })
     ]
   })
 

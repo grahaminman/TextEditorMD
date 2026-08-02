@@ -219,12 +219,43 @@ body,
   height: 100%;
 }
 
+.editor-host {
+  /* Allow drag-selection inside the editor pane */
+  user-select: text;
+}
+
 .editor-host .cm-editor {
   height: 100%;
 }
 
 .editor-host .cm-scroller {
   overflow: auto;
+}
+
+/*
+ * CodeMirror drawSelection() paints .cm-selectionBackground on a layer
+ * behind line chrome. Keep these highly visible as a CSS safety net.
+ * (Opaque .cm-activeLine used to fully hide selection.)
+ */
+.editor-host .cm-selectionBackground,
+.editor-host .cm-selectionLayer .cm-selectionBackground {
+  background-color: rgba(100, 181, 246, 0.45) !important;
+}
+
+html[data-theme='light'] .editor-host .cm-selectionBackground,
+html[data-theme='light'] .editor-host .cm-selectionLayer .cm-selectionBackground {
+  background-color: rgba(25, 118, 210, 0.38) !important;
+}
+
+/* Native fallback if drawSelection is ever disabled */
+.editor-host .cm-content ::selection,
+.editor-host .cm-line ::selection {
+  background-color: rgba(100, 181, 246, 0.45);
+}
+
+html[data-theme='light'] .editor-host .cm-content ::selection,
+html[data-theme='light'] .editor-host .cm-line ::selection {
+  background-color: rgba(25, 118, 210, 0.38);
 }
 
 .pane-resizer {
