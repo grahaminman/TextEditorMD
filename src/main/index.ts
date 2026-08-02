@@ -2,7 +2,7 @@
  * Electron main process entry for TextEditorMD.
  */
 
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers, setMainWindowGetter } from './ipc'
 import { buildApplicationMenu } from './menu'
@@ -63,13 +63,15 @@ function createWindow(): void {
     void (async () => {
       if (!mainWindow) return
       const prefs = getPreferences()
-      // Autosave on close when enabled and the file already has a path
-      if (prefs.autosaveOnClose && state.filePath) {
+      // Save all dirty tabs with paths when autosave-on-close is on
+      if (prefs.autosaveOnClose) {
         mainWindow.webContents.send(IPC.MENU_ACTION, 'file:autosave-then-quit')
         return
       }
-      // Untitled (or autosave-on-close off): prompt Save / Discard / Cancel
-      const choice = await confirmDiscard(mainWindow)
+      const choice = await confirmDiscard(
+        mainWindow,
+        'One or more tabs have unsaved changes.'
+      )
       if (choice === 'cancel') return
       if (choice === 'save') {
         mainWindow.webContents.send(IPC.MENU_ACTION, 'file:save-then-quit')
@@ -114,5 +116,25 @@ app.on('web-contents-created', (_event, contents) => {
       url.startsWith('file://') ||
       Boolean(process.env.ELECTRON_RENDERER_URL && url.startsWith(process.env.ELECTRON_RENDERER_URL))
     if (!allowed) event.preventDefault()
+  })
+
+  // Right-click cut / copy / paste / select all in the editor (and UI)
+  contents.on('context-menu', (_e, params) => {
+    const template: Electron.MenuItemConstructorOptions[] = []
+    if (params.isEditable || params.editFlags.canPaste) {
+      template.push(
+        { role: 'cut', enabled: params.editFlags.canCut },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', enabled: params.editFlags.canSelectAll }
+      )
+    } else if (params.selectionText) {
+      template.push({ role: 'copy' })
+    }
+    if (template.length === 0) return
+    Menu.buildFromTemplate(template).popup({
+      window: BrowserWindow.fromWebContents(contents) ?? undefined
+    })
   })
 })

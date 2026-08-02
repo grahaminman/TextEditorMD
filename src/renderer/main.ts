@@ -1,5 +1,5 @@
 /**
- * Renderer entry — editor, CommonMark preview, themes, settings.
+ * Renderer entry — multi-tab editor, CommonMark preview, themes, settings.
  */
 
 import './styles/app.css'
@@ -36,14 +36,20 @@ import {
 } from '../shared/markdown/commonmark'
 import { undo, redo } from '@codemirror/commands'
 
+interface TabDoc {
+  id: string
+  filePath: string | null
+  content: string
+  dirty: boolean
+  fromTemplate: boolean
+}
+
 let editor: EditorHandle
 let preview: PreviewHandle
 let syntaxSettings: SyntaxSettingsHandle
 let appSettings: AppSettingsHandle
 
 let theme: ThemeMode = 'system'
-let filePath: string | null = null
-let dirty = false
 let previewVisible = true
 let previewFollow = true
 let typewriterMode = false
@@ -59,6 +65,9 @@ let suppressDirty = false
 let welcomeDismissed = false
 let saving = false
 
+let tabs: TabDoc[] = []
+let activeTabId = ''
+
 let statsTimer: ReturnType<typeof setTimeout> | null = null
 let followTimer: ReturnType<typeof setTimeout> | null = null
 let autosaveTimer: ReturnType<typeof setInterval> | null = null
@@ -70,6 +79,7 @@ const el = {
   previewRoot: document.getElementById('preview') as HTMLElement,
   previewPane: document.getElementById('preview-pane') as HTMLElement,
   workspace: document.getElementById('workspace') as HTMLElement,
+  tabBar: document.getElementById('tab-bar') as HTMLElement,
   docTitle: document.getElementById('doc-title') as HTMLElement,
   statusWords: document.getElementById('status-words') as HTMLElement,
   statusChars: document.getElementById('status-chars') as HTMLElement,
@@ -96,6 +106,23 @@ const el = {
   welcomeOpen: document.getElementById('welcome-open') as HTMLButtonElement,
   welcomeDismiss: document.getElementById('welcome-dismiss') as HTMLButtonElement,
   resizer: document.getElementById('pane-resizer') as HTMLElement
+}
+
+function newTabId(): string {
+  return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function activeTab(): TabDoc | undefined {
+  return tabs.find((t) => t.id === activeTabId)
+}
+
+function anyDirty(): boolean {
+  return tabs.some((t) => t.dirty)
+}
+
+function fileName(path: string | null): string {
+  if (!path) return 'Untitled'
+  return path.split(/[/\\]/).pop() || 'Untitled'
 }
 
 function resolveDark(mode: ThemeMode): boolean {
@@ -128,15 +155,63 @@ function applySyntax(): void {
   editor?.setSyntaxHighlighting(syntaxHighlighting)
 }
 
+function syncMainDocState(): void {
+  const tab = activeTab()
+  const dirty = anyDirty()
+  void window.api.setDirty(dirty, tab?.filePath ?? null)
+  window.api.updateMenuState({
+    dirty,
+    hasPath: Boolean(tab?.filePath)
+  })
+}
+
 function updateTitle(): void {
-  const name = filePath
-    ? filePath.split(/[/\\]/).pop() || 'Untitled'
-    : 'Untitled'
-  el.docTitle.textContent = dirty ? `${name} •` : name
-  document.title = dirty ? `${name} • — TextEditorMD` : `${name} — TextEditorMD`
-  el.statusPath.textContent = filePath ?? ''
-  el.statusState.textContent = dirty ? 'Modified' : 'Ready'
-  window.api.updateMenuState({ dirty, hasPath: Boolean(filePath) })
+  const tab = activeTab()
+  const name = fileName(tab?.filePath ?? null)
+  const dirtyMark = tab?.dirty ? ' •' : ''
+  el.docTitle.textContent = `${name}${dirtyMark}`
+  document.title = `${name}${dirtyMark} — TextEditorMD`
+  el.statusPath.textContent = tab?.filePath ?? ''
+  if (!el.statusState.classList.contains('autosaved')) {
+    el.statusState.textContent = anyDirty() ? 'Modified' : 'Ready'
+  }
+  syncMainDocState()
+  renderTabs()
+}
+
+function renderTabs(): void {
+  const bar = el.tabBar
+  bar.innerHTML = ''
+  for (const tab of tabs) {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'tab' + (tab.id === activeTabId ? ' active' : '')
+    btn.setAttribute('role', 'tab')
+    btn.title = tab.filePath || 'Untitled'
+    const label = document.createElement('span')
+    label.className = 'tab-label'
+    label.textContent = fileName(tab.filePath) + (tab.dirty ? ' •' : '')
+    const close = document.createElement('button')
+    close.type = 'button'
+    close.className = 'tab-close'
+    close.setAttribute('aria-label', 'Close tab')
+    close.textContent = '×'
+    close.addEventListener('click', (e) => {
+      e.stopPropagation()
+      void closeTab(tab.id)
+    })
+    btn.appendChild(label)
+    btn.appendChild(close)
+    btn.addEventListener('click', () => switchTab(tab.id))
+    bar.appendChild(btn)
+  }
+  const add = document.createElement('button')
+  add.type = 'button'
+  add.className = 'tab-add'
+  add.title = 'New tab'
+  add.textContent = '+'
+  add.addEventListener('click', () => void doNew())
+  bar.appendChild(add)
 }
 
 function scheduleStats(): void {
@@ -162,63 +237,159 @@ function scheduleFollow(): void {
   }, 80)
 }
 
-async function setDirty(next: boolean): Promise<void> {
-  dirty = next
-  await window.api.setDirty(next)
-  updateTitle()
+function persistActiveToTab(): void {
+  const tab = activeTab()
+  if (!tab || !editor) return
+  tab.content = editor.getValue()
 }
 
-function loadDocument(content: string, path: string | null, fromTemplate: boolean): void {
+function loadTabIntoEditor(tab: TabDoc): void {
   suppressDirty = true
-  editor.setValue(content)
-  filePath = path
-  void setDirty(false)
+  editor.setValue(tab.content)
   suppressDirty = false
   scheduleStats()
-  if (fromTemplate && !welcomeDismissed) {
-    // keep welcome optional; hide after first load of template is fine
-  }
+  updateTitle()
   editor.focus()
 }
 
+function switchTab(id: string): void {
+  if (id === activeTabId) return
+  persistActiveToTab()
+  activeTabId = id
+  const tab = activeTab()
+  if (tab) loadTabIntoEditor(tab)
+}
+
+function openTab(content: string, path: string | null, fromTemplate = false): void {
+  if (path) {
+    const existing = tabs.find((t) => t.filePath === path)
+    if (existing) {
+      switchTab(existing.id)
+      return
+    }
+  }
+  persistActiveToTab()
+  const tab: TabDoc = {
+    id: newTabId(),
+    filePath: path,
+    content,
+    dirty: false,
+    fromTemplate
+  }
+  tabs.push(tab)
+  activeTabId = tab.id
+  loadTabIntoEditor(tab)
+}
+
+async function setActiveDirty(next: boolean): Promise<void> {
+  const tab = activeTab()
+  if (!tab) return
+  tab.dirty = next
+  updateTitle()
+}
+
+async function closeTab(id: string): Promise<void> {
+  const idx = tabs.findIndex((t) => t.id === id)
+  if (idx < 0) return
+  const tab = tabs[idx]
+  if (tab.id === activeTabId) persistActiveToTab()
+
+  if (tab.dirty) {
+    const choice = await window.api.confirmDiscard(
+      `"${fileName(tab.filePath)}" has unsaved changes.`
+    )
+    if (choice === 'cancel') return
+    if (choice === 'save') {
+      if (tab.id !== activeTabId) switchTab(tab.id)
+      const ok = await doSave(false)
+      if (!ok) return
+    }
+  }
+
+  tabs.splice(idx, 1)
+  if (tabs.length === 0) {
+    const result = await window.api.newFile()
+    openTab(result.content ?? '', null, true)
+    return
+  }
+  if (activeTabId === id) {
+    const next = tabs[Math.max(0, idx - 1)]
+    activeTabId = next.id
+    loadTabIntoEditor(next)
+  } else {
+    updateTitle()
+  }
+}
+
 async function handleSaveResult(
-  result: Awaited<ReturnType<typeof window.api.saveFile>>
+  result: Awaited<ReturnType<typeof window.api.saveFile>>,
+  tab: TabDoc
 ): Promise<boolean> {
   if (result.cancelled) return false
   if (result.error) {
     await window.api.showError(result.error)
     return false
   }
-  if (result.path) filePath = result.path
-  await setDirty(false)
+  if (result.path) tab.filePath = result.path
+  tab.dirty = false
+  tab.content = result.content ?? tab.content
+  updateTitle()
   return true
 }
 
 async function doSave(forceAs = false): Promise<boolean> {
   if (saving) return false
+  const tab = activeTab()
+  if (!tab) return false
   saving = true
   try {
-    const content = editor.getValue()
+    persistActiveToTab()
+    const content = tab.content
     const result = forceAs
-      ? await window.api.saveFileAs(content)
-      : await window.api.saveFile(content, false)
-    return await handleSaveResult(result)
+      ? await window.api.saveFileAs(content, tab.filePath)
+      : await window.api.saveFile(content, false, tab.filePath)
+    const ok = await handleSaveResult(result, tab)
+    if (ok && editor) {
+      // keep editor content in sync if path changed only
+      suppressDirty = true
+      if (editor.getValue() !== tab.content) editor.setValue(tab.content)
+      suppressDirty = false
+    }
+    return ok
   } finally {
     saving = false
   }
 }
 
-/**
- * Timed autosave / close autosave: only when dirty and a path exists.
- * Does not open Save As for untitled buffers.
- */
+async function saveTab(tab: TabDoc): Promise<boolean> {
+  if (!tab.dirty) return true
+  if (!tab.filePath) {
+    // need active for Save As UX
+    if (tab.id !== activeTabId) switchTab(tab.id)
+    return doSave(true)
+  }
+  const result = await window.api.saveFile(tab.content, false, tab.filePath)
+  return handleSaveResult(result, tab)
+}
+
 async function tryAutosave(reason: 'interval' | 'close'): Promise<boolean> {
-  if (!dirty || !filePath || saving) return !dirty
-  const ok = await doSave(false)
-  if (ok && reason === 'interval') {
+  if (saving) return false
+  persistActiveToTab()
+  let allOk = true
+  for (const tab of tabs) {
+    if (!tab.dirty || !tab.filePath) {
+      if (tab.dirty && !tab.filePath) allOk = false
+      continue
+    }
+    const result = await window.api.saveFile(tab.content, false, tab.filePath)
+    const ok = await handleSaveResult(result, tab)
+    if (!ok) allOk = false
+  }
+  if (allOk && reason === 'interval' && tabs.some((t) => t.filePath)) {
     flashStatus('Autosaved')
   }
-  return ok
+  // true if nothing dirty left, or only untitled dirty remains for close prompt
+  return !anyDirty() || (reason === 'close' && tabs.every((t) => !t.dirty || !t.filePath))
 }
 
 function flashStatus(message: string): void {
@@ -268,33 +439,70 @@ function applyAutosavePrefs(partial: {
 }
 
 async function doNew(): Promise<void> {
-  let result = await window.api.newFile()
-  if (result.needsSave && result.then === 'new') {
-    const saved = await doSave()
-    if (!saved) return
-    result = await window.api.newFile()
-  }
+  const result = await window.api.newFile()
   if (result.cancelled) return
   if (result.error) {
     await window.api.showError(result.error)
     return
   }
-  loadDocument(result.content ?? '', result.path ?? null, Boolean(result.fromTemplate))
+  openTab(result.content ?? '', null, Boolean(result.fromTemplate))
+  el.welcome.classList.add('hidden')
 }
 
 async function doOpen(): Promise<void> {
-  let result = await window.api.openFile()
-  if (result.needsSave && result.then === 'open') {
-    const saved = await doSave()
-    if (!saved) return
-    result = await window.api.openFile()
-  }
+  const result = await window.api.openFile()
   if (result.cancelled) return
   if (result.error) {
     await window.api.showError(result.error)
     return
   }
-  loadDocument(result.content ?? '', result.path ?? null, false)
+  const paths = result.paths ?? (result.path ? [result.path] : [])
+  const contents = result.contents ?? (result.content != null ? [result.content] : [])
+  for (let i = 0; i < paths.length; i++) {
+    openTab(contents[i] ?? '', paths[i], false)
+  }
+  el.welcome.classList.add('hidden')
+}
+
+async function doOpenRecent(filePath: string): Promise<void> {
+  const existing = tabs.find((t) => t.filePath === filePath)
+  if (existing) {
+    switchTab(existing.id)
+    return
+  }
+  const result = await window.api.openPath(filePath)
+  if (result.cancelled) {
+    if (result.error) await window.api.showError(result.error)
+    return
+  }
+  openTab(result.content ?? '', result.path ?? filePath, false)
+  el.welcome.classList.add('hidden')
+}
+
+async function saveAllDirtyThenQuit(preferAutosave: boolean): Promise<void> {
+  persistActiveToTab()
+  if (preferAutosave) {
+    await tryAutosave('close')
+  }
+  for (const tab of [...tabs]) {
+    if (!tab.dirty) continue
+    if (tab.id !== activeTabId) switchTab(tab.id)
+    if (tab.filePath && preferAutosave) {
+      await saveTab(tab)
+      continue
+    }
+    const choice = await window.api.confirmDiscard(
+      `"${fileName(tab.filePath)}" has unsaved changes.`
+    )
+    if (choice === 'cancel') return
+    if (choice === 'save') {
+      const ok = await doSave(!tab.filePath)
+      if (!ok) return
+    } else {
+      tab.dirty = false
+    }
+  }
+  if (!anyDirty()) window.close()
 }
 
 function cycleTheme(): void {
@@ -371,7 +579,7 @@ function wireUi(): void {
 }
 
 function wireMenus(): void {
-  window.api.onMenuAction((action) => {
+  window.api.onMenuAction((action, payload) => {
     void (async () => {
       switch (action) {
         case 'file:new':
@@ -380,31 +588,33 @@ function wireMenus(): void {
         case 'file:open':
           await doOpen()
           break
+        case 'file:open-recent':
+          if (payload) await doOpenRecent(payload)
+          break
+        case 'file:clear-recent':
+          await window.api.clearRecent()
+          break
         case 'file:save':
           await doSave(false)
           break
         case 'file:save-as':
           await doSave(true)
           break
-        case 'file:save-then-quit': {
-          const ok = await doSave(false)
-          if (ok) window.close()
+        case 'file:close-tab':
+          await closeTab(activeTabId)
           break
-        }
-        case 'file:autosave-then-quit': {
-          // Close with known path: silent save. If it fails, fall back to prompt flow.
-          const ok = await tryAutosave('close')
-          if (ok) {
-            window.close()
-          } else {
-            // Still dirty/untitled or error — let user choose Save As
-            const saved = await doSave(false)
-            if (saved) window.close()
-          }
+        case 'file:save-then-quit':
+          await saveAllDirtyThenQuit(false)
           break
-        }
+        case 'file:autosave-then-quit':
+          await saveAllDirtyThenQuit(true)
+          break
         case 'file:export-html': {
-          const r = await window.api.exportHtml(editor.getValue())
+          const tab = activeTab()
+          const r = await window.api.exportHtml(
+            editor.getValue(),
+            tab?.filePath ?? null
+          )
           if (r.error) await window.api.showError(r.error)
           break
         }
@@ -491,7 +701,14 @@ async function bootstrap(): Promise<void> {
     typewriterMode,
     syntaxHighlighting,
     onChange: () => {
-      if (!suppressDirty) void setDirty(true)
+      if (!suppressDirty) {
+        const tab = activeTab()
+        if (tab) {
+          tab.dirty = true
+          tab.content = editor.getValue()
+          updateTitle()
+        }
+      }
       scheduleStats()
     },
     onCursor: (line) => {
@@ -560,7 +777,7 @@ async function bootstrap(): Promise<void> {
   })
 
   const startup = await window.api.getStartupDocument()
-  loadDocument(startup.content, startup.path, startup.fromTemplate)
+  openTab(startup.content, startup.path, startup.fromTemplate)
   if (startup.fromTemplate && !startup.path) {
     el.welcome.classList.remove('hidden')
   }

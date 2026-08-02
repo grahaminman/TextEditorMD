@@ -1,5 +1,6 @@
 /**
  * File open / save / export orchestration.
+ * Multi-tab: main does not block open/new on dirty state — the renderer owns tabs.
  */
 
 import { app, BrowserWindow, dialog } from 'electron'
@@ -12,9 +13,15 @@ import {
   SAVE_MD_FILTERS
 } from '../shared/constants/app'
 import { markdownToStandaloneHtml } from '../shared/markdown/export-html'
-import { getPreferences, setPreference } from './store'
+import {
+  clearRecentFiles,
+  getPreferences,
+  pushRecentFile,
+  setPreference
+} from './store'
 import { pathExists } from './path-exists'
 import { getBundledTemplatePath, readStarterTemplate } from './template-service'
+import { buildApplicationMenu } from './menu'
 
 export interface DocumentState {
   filePath: string | null
@@ -25,6 +32,8 @@ export interface FileResult {
   cancelled: boolean
   content?: string
   path?: string | null
+  paths?: string[]
+  contents?: string[]
   needsSave?: boolean
   then?: string
   error?: string
@@ -38,6 +47,7 @@ export interface StartupDocument {
   templatePath: string
 }
 
+/** Active-tab mirror for window-close / autosave (renderer keeps in sync). */
 let documentState: DocumentState = {
   filePath: null,
   dirty: false
@@ -64,12 +74,16 @@ async function rememberDir(filePath: string): Promise<void> {
   setPreference('lastDirectory', path.dirname(filePath))
 }
 
-async function rememberLastFile(filePath: string | null): Promise<void> {
-  setPreference('lastFilePath', filePath ?? '')
+async function rememberFile(filePath: string): Promise<void> {
+  pushRecentFile(filePath)
+  await rememberDir(filePath)
+  const w = win()
+  if (w) buildApplicationMenu(w)
 }
 
 export async function confirmDiscard(
-  parent?: BrowserWindow | null
+  parent?: BrowserWindow | null,
+  detail = 'Your document has unsaved changes.'
 ): Promise<'save' | 'discard' | 'cancel'> {
   const w = parent ?? win()
   if (!w) return 'cancel'
@@ -80,7 +94,7 @@ export async function confirmDiscard(
     cancelId: 2,
     title: 'Unsaved changes',
     message: 'Save changes before continuing?',
-    detail: 'Your document has unsaved changes.'
+    detail
   })
   if (response === 0) return 'save'
   if (response === 1) return 'discard'
@@ -106,44 +120,63 @@ export async function getStartupDocument(): Promise<StartupDocument> {
 
 export async function getTemplateDocument(): Promise<StartupDocument> {
   const content = await readStarterTemplate()
-  const templatePath = getBundledTemplatePath()
-  setDocumentState({ filePath: null, dirty: false })
-  return { content, path: null, fromTemplate: true, templatePath }
+  return {
+    content,
+    path: null,
+    fromTemplate: true,
+    templatePath: getBundledTemplatePath()
+  }
 }
 
+/** New tab content — no dirty gate (tabs handled in renderer). */
 export async function newFile(): Promise<FileResult> {
-  if (documentState.dirty) {
-    const choice = await confirmDiscard()
-    if (choice === 'cancel') return { cancelled: true }
-    if (choice === 'save') return { cancelled: false, needsSave: true, then: 'new' }
-  }
   const content = await readStarterTemplate()
-  setDocumentState({ filePath: null, dirty: false })
-  await rememberLastFile(null)
   return { cancelled: false, content, path: null, fromTemplate: true }
 }
 
+/** Open one or more files into tabs. */
 export async function openFile(): Promise<FileResult> {
-  if (documentState.dirty) {
-    const choice = await confirmDiscard()
-    if (choice === 'cancel') return { cancelled: true }
-    if (choice === 'save') return { cancelled: false, needsSave: true, then: 'open' }
-  }
   const w = win()
   if (!w) return { cancelled: true }
   const result = await dialog.showOpenDialog(w, {
     title: 'Open Markdown',
     defaultPath: defaultDir() || undefined,
     filters: OPEN_FILTERS,
-    properties: ['openFile']
+    properties: ['openFile', 'multiSelections']
   })
   if (result.canceled || !result.filePaths[0]) return { cancelled: true }
-  const filePath = result.filePaths[0]
+
+  const paths: string[] = []
+  const contents: string[] = []
+  for (const filePath of result.filePaths) {
+    try {
+      const content = await fs.readFile(filePath, 'utf8')
+      paths.push(filePath)
+      contents.push(content)
+      await rememberFile(filePath)
+    } catch (err) {
+      return { cancelled: true, error: String(err) }
+    }
+  }
+  if (!paths.length) return { cancelled: true }
+  setDocumentState({ filePath: paths[paths.length - 1], dirty: false })
+  return {
+    cancelled: false,
+    path: paths[0],
+    content: contents[0],
+    paths,
+    contents
+  }
+}
+
+export async function openPath(filePath: string): Promise<FileResult> {
+  if (!(await pathExists(filePath))) {
+    return { cancelled: true, error: `File not found:\n${filePath}` }
+  }
   try {
     const content = await fs.readFile(filePath, 'utf8')
     setDocumentState({ filePath, dirty: false })
-    await rememberDir(filePath)
-    await rememberLastFile(filePath)
+    await rememberFile(filePath)
     return { cancelled: false, content, path: filePath }
   } catch (err) {
     return { cancelled: true, error: String(err) }
@@ -152,31 +185,37 @@ export async function openFile(): Promise<FileResult> {
 
 export async function saveFile(
   content: string,
-  forceSaveAs = false
+  forceSaveAs = false,
+  activePath?: string | null
 ): Promise<FileResult> {
-  if (!documentState.filePath || forceSaveAs) {
-    return saveFileAs(content)
+  const target =
+    activePath !== undefined ? activePath : documentState.filePath
+  if (!target || forceSaveAs) {
+    return saveFileAs(content, target)
   }
   try {
-    await fs.writeFile(documentState.filePath, content, 'utf8')
-    setDocumentState({ dirty: false })
-    await rememberDir(documentState.filePath)
-    await rememberLastFile(documentState.filePath)
-    return { cancelled: false, path: documentState.filePath, content }
+    await fs.writeFile(target, content, 'utf8')
+    setDocumentState({ filePath: target, dirty: false })
+    await rememberFile(target)
+    return { cancelled: false, path: target, content }
   } catch (err) {
     return { cancelled: true, error: String(err) }
   }
 }
 
-export async function saveFileAs(content: string): Promise<FileResult> {
+export async function saveFileAs(
+  content: string,
+  suggestedPath?: string | null
+): Promise<FileResult> {
   const w = win()
   if (!w) return { cancelled: true }
-  const suggested =
+  const base =
+    suggestedPath ||
     documentState.filePath ||
     path.join(defaultDir() || appDocuments(), `untitled${MD_EXTENSION}`)
   const result = await dialog.showSaveDialog(w, {
     title: 'Save Markdown',
-    defaultPath: suggested,
+    defaultPath: base,
     filters: SAVE_MD_FILTERS
   })
   if (result.canceled || !result.filePath) return { cancelled: true }
@@ -185,8 +224,7 @@ export async function saveFileAs(content: string): Promise<FileResult> {
   try {
     await fs.writeFile(filePath, content, 'utf8')
     setDocumentState({ filePath, dirty: false })
-    await rememberDir(filePath)
-    await rememberLastFile(filePath)
+    await rememberFile(filePath)
     return { cancelled: false, path: filePath, content }
   } catch (err) {
     return { cancelled: true, error: String(err) }
@@ -201,11 +239,15 @@ function appDocuments(): string {
   }
 }
 
-export async function exportHtml(content: string): Promise<FileResult> {
+export async function exportHtml(
+  content: string,
+  activePath?: string | null
+): Promise<FileResult> {
   const w = win()
   if (!w) return { cancelled: true }
-  const base = documentState.filePath
-    ? path.basename(documentState.filePath, path.extname(documentState.filePath))
+  const src = activePath || documentState.filePath
+  const base = src
+    ? path.basename(src, path.extname(src))
     : 'document'
   const result = await dialog.showSaveDialog(w, {
     title: 'Export HTML',
@@ -231,4 +273,10 @@ export async function showError(message: string): Promise<void> {
     title: 'Error',
     message
   })
+}
+
+export function clearRecent(): void {
+  clearRecentFiles()
+  const w = win()
+  if (w) buildApplicationMenu(w)
 }

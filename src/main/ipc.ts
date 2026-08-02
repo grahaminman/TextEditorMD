@@ -5,6 +5,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC } from '../shared/constants/app'
 import {
+  clearRecent,
   confirmDiscard,
   exportHtml,
   getDocumentState,
@@ -12,6 +13,7 @@ import {
   getTemplateDocument,
   newFile,
   openFile,
+  openPath,
   saveFile,
   saveFileAs,
   setDocumentState,
@@ -40,20 +42,40 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FILE_GET_STATE, () => getDocumentState())
-  ipcMain.handle(IPC.FILE_SET_DIRTY, (_e, dirty: boolean) =>
-    setDocumentState({ dirty: Boolean(dirty) })
+  ipcMain.handle(IPC.FILE_SET_DIRTY, (_e, dirty: boolean, filePath?: string | null) =>
+    setDocumentState({
+      dirty: Boolean(dirty),
+      ...(filePath !== undefined ? { filePath } : {})
+    })
   )
   ipcMain.handle(IPC.FILE_GET_STARTUP, () => getStartupDocument())
   ipcMain.handle(IPC.FILE_GET_TEMPLATE, () => getTemplateDocument())
   ipcMain.handle(IPC.FILE_NEW, () => newFile())
   ipcMain.handle(IPC.FILE_OPEN, () => openFile())
-  ipcMain.handle(IPC.FILE_SAVE, (_e, content: string, forceSaveAs?: boolean) =>
-    saveFile(content, Boolean(forceSaveAs))
+  ipcMain.handle(IPC.FILE_OPEN_PATH, (_e, filePath: string) => openPath(filePath))
+  ipcMain.handle(
+    IPC.FILE_SAVE,
+    (_e, content: string, forceSaveAs?: boolean, activePath?: string | null) =>
+      saveFile(content, Boolean(forceSaveAs), activePath)
   )
-  ipcMain.handle(IPC.FILE_SAVE_AS, (_e, content: string) => saveFileAs(content))
-  ipcMain.handle(IPC.FILE_EXPORT_HTML, (_e, content: string) => exportHtml(content))
+  ipcMain.handle(
+    IPC.FILE_SAVE_AS,
+    (_e, content: string, suggestedPath?: string | null) =>
+      saveFileAs(content, suggestedPath)
+  )
+  ipcMain.handle(
+    IPC.FILE_EXPORT_HTML,
+    (_e, content: string, activePath?: string | null) =>
+      exportHtml(content, activePath)
+  )
+  ipcMain.handle(IPC.FILE_RECENT_CLEAR, () => {
+    clearRecent()
+    return getPreferences()
+  })
 
-  ipcMain.handle(IPC.DIALOG_CONFIRM_DISCARD, () => confirmDiscard())
+  ipcMain.handle(IPC.DIALOG_CONFIRM_DISCARD, (_e, detail?: string) =>
+    confirmDiscard(null, detail)
+  )
   ipcMain.handle(IPC.DIALOG_SHOW_ERROR, (_e, message: string) => showError(message))
 
   ipcMain.handle(IPC.APP_GET_VERSION, () => app.getVersion())

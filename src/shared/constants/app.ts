@@ -12,10 +12,14 @@ export const AUTOSAVE_INTERVAL_OPTIONS = [1, 2, 5, 10, 15, 30, 60] as const
 export type AutosaveIntervalMinutes = (typeof AUTOSAVE_INTERVAL_OPTIONS)[number]
 
 /** Preferences shape shared by main, preload, and renderer. */
+export const MAX_RECENT_FILES = 12
+
 export interface AppPreferences {
   theme: ThemeMode
   lastDirectory: string
   lastFilePath: string
+  /** Recently opened/saved absolute paths (most recent first). */
+  recentFiles: string[]
   previewVisible: boolean
   previewFollow: boolean
   typewriterMode: boolean
@@ -92,9 +96,11 @@ export const IPC = {
   FILE_GET_TEMPLATE: 'file:get-template',
   FILE_NEW: 'file:new',
   FILE_OPEN: 'file:open',
+  FILE_OPEN_PATH: 'file:open-path',
   FILE_SAVE: 'file:save',
   FILE_SAVE_AS: 'file:save-as',
   FILE_EXPORT_HTML: 'file:export-html',
+  FILE_RECENT_CLEAR: 'file:recent-clear',
 
   DIALOG_CONFIRM_DISCARD: 'dialog:confirm-discard',
   DIALOG_SHOW_ERROR: 'dialog:show-error',

@@ -11,6 +11,7 @@ import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
+  MAX_RECENT_FILES,
   clampAutosaveIntervalMinutes,
   type AppPreferences
 } from '../shared/constants/app'
@@ -22,6 +23,7 @@ const defaults: AppPreferences = {
   theme: DEFAULT_THEME,
   lastDirectory: '',
   lastFilePath: '',
+  recentFiles: [],
   previewVisible: true,
   previewFollow: true,
   typewriterMode: false,
@@ -45,11 +47,31 @@ function clampFontSize(n: number): number {
   return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(n)))
 }
 
+function normaliseRecent(list: unknown): string[] {
+  if (!Array.isArray(list)) return []
+  const out: string[] = []
+  for (const item of list) {
+    if (typeof item === 'string' && item.trim() && !out.includes(item)) {
+      out.push(item)
+    }
+  }
+  return out.slice(0, MAX_RECENT_FILES)
+}
+
 export function getPreferences(): AppPreferences {
+  const lastFilePath = prefsStore.get('lastFilePath', defaults.lastFilePath)
+  let recentFiles = normaliseRecent(
+    prefsStore.get('recentFiles', defaults.recentFiles)
+  )
+  // Seed recent list from lastFilePath for upgrades
+  if (lastFilePath && !recentFiles.includes(lastFilePath)) {
+    recentFiles = [lastFilePath, ...recentFiles].slice(0, MAX_RECENT_FILES)
+  }
   return {
     theme: prefsStore.get('theme', defaults.theme),
     lastDirectory: prefsStore.get('lastDirectory', defaults.lastDirectory),
-    lastFilePath: prefsStore.get('lastFilePath', defaults.lastFilePath),
+    lastFilePath,
+    recentFiles,
     previewVisible: prefsStore.get('previewVisible', defaults.previewVisible),
     previewFollow: prefsStore.get('previewFollow', defaults.previewFollow),
     typewriterMode: prefsStore.get('typewriterMode', defaults.typewriterMode),
@@ -92,6 +114,8 @@ export function setPreference<K extends keyof AppPreferences>(
       key,
       clampAutosaveIntervalMinutes(value as number) as AppPreferences[K]
     )
+  } else if (key === 'recentFiles') {
+    prefsStore.set(key, normaliseRecent(value) as AppPreferences[K])
   } else {
     prefsStore.set(key, value)
   }
@@ -101,16 +125,24 @@ export function setPreference<K extends keyof AppPreferences>(
 export function setPreferences(partial: Partial<AppPreferences>): AppPreferences {
   for (const [k, v] of Object.entries(partial)) {
     if (v === undefined) continue
-    if (k === 'editorFontSize') {
-      prefsStore.set('editorFontSize', clampFontSize(v as number))
-    } else if (k === 'autosaveIntervalMinutes') {
-      prefsStore.set(
-        'autosaveIntervalMinutes',
-        clampAutosaveIntervalMinutes(v as number)
-      )
-    } else {
-      prefsStore.set(k as keyof AppPreferences, v as never)
-    }
+    setPreference(k as keyof AppPreferences, v as never)
   }
+  return getPreferences()
+}
+
+/** Push a path to the front of the recent-files list. */
+export function pushRecentFile(filePath: string): AppPreferences {
+  const prefs = getPreferences()
+  const next = [
+    filePath,
+    ...prefs.recentFiles.filter((p) => p !== filePath)
+  ].slice(0, MAX_RECENT_FILES)
+  prefsStore.set('recentFiles', next)
+  prefsStore.set('lastFilePath', filePath)
+  return getPreferences()
+}
+
+export function clearRecentFiles(): AppPreferences {
+  prefsStore.set('recentFiles', [])
   return getPreferences()
 }

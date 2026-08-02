@@ -2,7 +2,14 @@
  * Native application menu for TextEditorMD.
  */
 
-import { app, BrowserWindow, Menu, shell, type MenuItemConstructorOptions } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  shell,
+  type MenuItemConstructorOptions
+} from 'electron'
+import * as path from 'path'
 import { IPC } from '../shared/constants/app'
 import { getPreferences, setPreference } from './store'
 
@@ -13,8 +20,8 @@ let currentState = {
   canRedo: false
 }
 
-function send(win: BrowserWindow, action: string): void {
-  win.webContents.send(IPC.MENU_ACTION, action)
+function send(win: BrowserWindow, action: string, payload?: string): void {
+  win.webContents.send(IPC.MENU_ACTION, action, payload)
 }
 
 export function updateMenuState(partial: Partial<typeof currentState>): void {
@@ -26,6 +33,23 @@ export function updateMenuState(partial: Partial<typeof currentState>): void {
 export function buildApplicationMenu(win: BrowserWindow): void {
   const prefs = getPreferences()
   const isMac = process.platform === 'darwin'
+  const recent = prefs.recentFiles || []
+
+  const recentSubmenu: MenuItemConstructorOptions[] =
+    recent.length === 0
+      ? [{ label: '(No recent files)', enabled: false }]
+      : [
+          ...recent.map((filePath) => ({
+            label: path.basename(filePath),
+            toolTip: filePath,
+            click: () => send(win, 'file:open-recent', filePath)
+          })),
+          { type: 'separator' as const },
+          {
+            label: 'Clear Recent',
+            click: () => send(win, 'file:clear-recent')
+          }
+        ]
 
   const template: MenuItemConstructorOptions[] = [
     ...(isMac
@@ -60,6 +84,10 @@ export function buildApplicationMenu(win: BrowserWindow): void {
           click: () => send(win, 'file:open')
         },
         {
+          label: 'Open Recent',
+          submenu: recentSubmenu
+        },
+        {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
           click: () => send(win, 'file:save')
@@ -68,6 +96,11 @@ export function buildApplicationMenu(win: BrowserWindow): void {
           label: 'Save As…',
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => send(win, 'file:save-as')
+        },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => send(win, 'file:close-tab')
         },
         { type: 'separator' },
         {

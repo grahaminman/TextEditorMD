@@ -57,8 +57,88 @@ body,
 
 #app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   height: 100%;
+}
+
+/* Tabs */
+.tab-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 0.35rem;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 2.1rem;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 12rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.65rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: calc(12px * var(--ui-scale));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+
+.tab.active {
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border-color: var(--border);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.tab-add {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 1.1rem;
+  padding: 0 0.55rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.tab-add:hover {
+  color: var(--accent);
+  background: var(--bg-elevated);
 }
 
 .toolbar {
